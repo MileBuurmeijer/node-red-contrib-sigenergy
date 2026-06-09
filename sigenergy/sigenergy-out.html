@@ -1,0 +1,217 @@
+<script type="text/html" data-template-name="sigenergy-out">
+    <div class="form-row">
+        <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name">
+    </div>
+    
+    <div class="form-row">
+        <label for="node-input-broker"><i class="fa fa-globe"></i> MQTT Broker</label>
+        <input type="text" id="node-input-broker">
+    </div>
+
+    <div class="form-row">
+        <label for="node-input-baseTopic"><i class="fa fa-folder-open-o"></i> Base Topic</label>
+        <input type="text" id="node-input-baseTopic" placeholder="sigenergy2mqtt">
+    </div>
+
+    <div class="form-row">
+        <label for="node-input-inverterId"><i class="fa fa-sliders"></i> Inverter ID</label>
+        <div style="display: inline-flex; width: 70%; gap: 5px;">
+            <input type="text" id="node-input-inverterId" placeholder="e.g. sigen_0_inverter_1" style="flex-grow: 1;">
+            <button type="button" id="btn-out-discover-inverters" class="red-ui-button" style="white-space: nowrap;"><i class="fa fa-search"></i> Discover</button>
+        </div>
+    </div>
+    <div class="form-row" id="row-out-discover-status" style="display: none; padding-left: 105px; font-style: italic; color: #666; font-size: 0.9em;">
+        <i class="fa fa-spinner fa-spin"></i> Discovering active inverters on MQTT...
+    </div>
+
+    <div class="form-row">
+        <label for="node-input-commandType"><i class="fa fa-cogs"></i> Command</label>
+        <select id="node-input-commandType" style="width: 70%;">
+            <option value="ess_max_charging_limit">Set Battery Max Charging Power Limit (W)</option>
+            <option value="ess_max_discharging_limit">Set Battery Max Discharging Power Limit (W)</option>
+            <option value="ess_charge_cut_off_soc">Set Battery Charge Cut-off SoC (%)</option>
+            <option value="ess_discharge_cut_off_soc">Set Battery Discharge Cut-off SoC (%)</option>
+            <option value="remote_ems_control_mode">Set Remote EMS Control Mode</option>
+            <option value="custom">Custom Command / Register Suffix</option>
+        </select>
+    </div>
+
+    <div class="form-row" id="row-custom-command" style="display: none;">
+        <label for="node-input-customCommand"><i class="fa fa-pencil"></i> Sensor Suffix</label>
+        <input type="text" id="node-input-customCommand" placeholder="e.g., ev_charger_max_current" style="width: 70%;">
+    </div>
+
+    <div class="form-row">
+        <label for="node-input-payloadSource"><i class="fa fa-sign-in"></i> Value Source</label>
+        <select id="node-input-payloadSource" style="width: 70%;">
+            <option value="payload">msg.payload (dynamic value from input)</option>
+            <option value="fixed">Fixed Value (configured below)</option>
+        </select>
+    </div>
+
+    <div class="form-row" id="row-fixed-value" style="display: none;">
+        <label for="node-input-fixedValue"><i class="fa fa-envelope-o"></i> Fixed Value</label>
+        <input type="text" id="node-input-fixedValue" placeholder="Value to write" style="width: 70%;">
+    </div>
+</script>
+
+<script type="text/html" data-help-name="sigenergy-out">
+    <p>Sends settings and configuration command messages to a Sigenergy inverter via the <code>sigenergy2mqtt</code> service.</p>
+    
+    <h3>Inputs</h3>
+    <dl class="message-properties">
+        <dt>payload <span class="property-type">number | boolean | string</span></dt>
+        <dd>The setting value to write (if Value Source is set to msg.payload).</dd>
+        
+        <dt class="optional">inverterId <span class="property-type">string</span></dt>
+        <dd>Overrides the node's configured Inverter ID dynamically.</dd>
+        
+        <dt class="optional">sensor / command <span class="property-type">string</span></dt>
+        <dd>Overrides the target register/command name dynamically (e.g. <code>ess_charge_cut_off_soc</code>).</dd>
+    </dl>
+
+    <h3>Outputs</h3>
+    <p>None. Outputs are sent directly to the MQTT broker.</p>
+
+    <h3>Details</h3>
+    <p><b>Dynamic Commands:</b> By default, the node publishes to the topic: <code>[baseTopic]/[inverterId]_[command]/set</code>.</p>
+    
+    <p><b>Predefined Commands:</b></p>
+    <ul>
+        <li><b>Set Battery Max Charging Power Limit:</b> Maximum power to charge the battery in Watts.</li>
+        <li><b>Set Battery Max Discharging Power Limit:</b> Maximum power to discharge the battery in Watts.</li>
+        <li><b>Set Battery Charge Cut-off SoC:</b> Battery SoC (%) cut-off to stop charging.</li>
+        <li><b>Set Battery Discharge Cut-off SoC:</b> Battery SoC (%) cut-off to stop discharging.</li>
+        <li><b>Set Remote EMS Control Mode:</b> Operation control modes.</li>
+        <li><b>Custom:</b> Enter any other writeable sensor suffix exposed by your inverter.</li>
+    </ul>
+    
+    <p><b>Values:</b> You can write dynamic values via <code>msg.payload</code>, or configure a fixed payload value directly inside the node settings.</p>
+</script>
+
+<script type="text/javascript">
+    RED.nodes.registerType('sigenergy-out', {
+        category: 'network',
+        color: '#E6E0F8', // Violet/Lavender background
+        defaults: {
+            name: { value: "" },
+            broker: { type: "mqtt-broker", required: true },
+            baseTopic: { value: "sigenergy2mqtt", required: true },
+            inverterId: { value: "", required: true },
+            commandType: { value: "ess_charge_cut_off_soc" },
+            customCommand: { value: "" },
+            payloadSource: { value: "payload" },
+            fixedValue: { value: "" }
+        },
+        inputs: 1,
+        outputs: 0,
+        icon: "arrow-out.svg",
+        align: "right",
+        label: function() {
+            if (this.name) return this.name;
+            var commandLabel = this.commandType;
+            if (commandLabel === 'custom') {
+                commandLabel = this.customCommand || "Custom";
+            } else {
+                commandLabel = commandLabel.replace(/_/g, ' ');
+            }
+            return (this.inverterId ? this.inverterId + " " : "") + commandLabel;
+        },
+        oneditprepare: function() {
+            // Toggle custom command input
+            $("#node-input-commandType").on("change", function() {
+                if ($(this).val() === "custom") {
+                    $("#row-custom-command").slideDown(200);
+                } else {
+                    $("#row-custom-command").slideUp(200);
+                }
+            });
+            
+            // Toggle fixed value input
+            $("#node-input-payloadSource").on("change", function() {
+                if ($(this).val() === "fixed") {
+                    $("#row-fixed-value").slideDown(200);
+                } else {
+                    $("#row-fixed-value").slideUp(200);
+                }
+            });
+            
+            // Wire up discover button
+            $("#btn-out-discover-inverters").on("click", function() {
+                var brokerId = $("#node-input-broker").val();
+                var baseTopic = $("#node-input-baseTopic").val() || "sigenergy2mqtt";
+                
+                if (!brokerId || brokerId === "_ADD_") {
+                    RED.notify("Please select and deploy an MQTT Broker configuration first.", "warning");
+                    return;
+                }
+                
+                $("#row-out-discover-status").show();
+                $("#btn-out-discover-inverters").prop("disabled", true);
+                
+                $.getJSON("sigenergy/discover/" + brokerId, { baseTopic: baseTopic })
+                    .done(function(data) {
+                        $("#row-out-discover-status").hide();
+                        $("#btn-out-discover-inverters").prop("disabled", false);
+                        
+                        if (data.error) {
+                            RED.notify(data.error, "error");
+                            return;
+                        }
+                        
+                        if (data.inverters && data.inverters.length > 0) {
+                            var list = data.inverters;
+                            if (list.length === 1) {
+                                $("#node-input-inverterId").val(list[0]);
+                                RED.notify("Discovered and selected inverter: " + list[0], "success");
+                            } else {
+                                // Create select menu popup
+                                var selectHtml = "<div style='margin-bottom: 15px;'>Multiple inverters found. Select one to use:</div>";
+                                selectHtml += "<select id='temp-out-inverter-select' style='width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #ccc;'>";
+                                list.forEach(function(inv) {
+                                    selectHtml += "<option value='" + inv + "'>" + inv + "</option>";
+                                });
+                                selectHtml += "</select>";
+                                
+                                var container = $("<div style='padding: 10px;'>" + selectHtml + "</div>");
+                                
+                                // Overlay modal select
+                                container.dialog({
+                                    title: "Select Discovered Inverter",
+                                    modal: true,
+                                    width: 350,
+                                    buttons: [
+                                        {
+                                            text: "Select",
+                                            class: "primary",
+                                            click: function() {
+                                                var val = $("#temp-out-inverter-select").val();
+                                                $("#node-input-inverterId").val(val);
+                                                $(this).dialog("close");
+                                                container.remove();
+                                            }
+                                        },
+                                        {
+                                            text: "Cancel",
+                                            click: function() {
+                                                $(this).dialog("close");
+                                                container.remove();
+                                            }
+                                        }
+                                    ]
+                                });
+                            }
+                        } else {
+                            RED.notify("No active Sigenergy inverters found. Ensure your sigenergy2mqtt service is running.", "warning");
+                        }
+                    })
+                    .fail(function() {
+                        $("#row-out-discover-status").hide();
+                        $("#btn-out-discover-inverters").prop("disabled", false);
+                        RED.notify("Failed to query discovery endpoint. Please deploy your MQTT broker settings first.", "error");
+                    });
+            });
+        }
+    });
+</script>

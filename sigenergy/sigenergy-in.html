@@ -1,0 +1,214 @@
+<script type="text/html" data-template-name="sigenergy-in">
+    <div class="form-row">
+        <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name">
+    </div>
+    
+    <div class="form-row">
+        <label for="node-input-broker"><i class="fa fa-globe"></i> MQTT Broker</label>
+        <input type="text" id="node-input-broker">
+    </div>
+
+    <div class="form-row">
+        <label for="node-input-baseTopic"><i class="fa fa-folder-open-o"></i> Base Topic</label>
+        <input type="text" id="node-input-baseTopic" placeholder="sigenergy2mqtt">
+    </div>
+
+    <div class="form-row">
+        <label for="node-input-inverterId"><i class="fa fa-sliders"></i> Inverter ID</label>
+        <div style="display: inline-flex; width: 70%; gap: 5px;">
+            <input type="text" id="node-input-inverterId" placeholder="e.g. sigen_0_inverter_1 or 'all'" style="flex-grow: 1;">
+            <button type="button" id="btn-discover-inverters" class="red-ui-button" style="white-space: nowrap;"><i class="fa fa-search"></i> Discover</button>
+        </div>
+    </div>
+    <div class="form-row" id="row-discover-status" style="display: none; padding-left: 105px; font-style: italic; color: #666; font-size: 0.9em;">
+        <i class="fa fa-spinner fa-spin"></i> Discovering active inverters on MQTT...
+    </div>
+
+    <div class="form-row">
+        <label for="node-input-outputMode"><i class="fa fa-sign-out"></i> Output Mode</label>
+        <select id="node-input-outputMode" style="width: 70%;">
+            <option value="split">Split: One message per state change</option>
+            <option value="grouped">Grouped: Combined inverter state object (debounced)</option>
+        </select>
+    </div>
+
+    <div class="form-row">
+        <label for="node-input-filterSensors" style="width: auto; margin-right: 15px;"><i class="fa fa-filter"></i> Filter by Capabilities</label>
+        <input type="checkbox" id="node-input-filterSensors" style="display: inline-block; width: auto; vertical-align: top; margin-top: 5px;">
+    </div>
+
+    <div id="row-sensor-categories" style="display: none; padding: 10px; margin-left: 20px; border-left: 3px solid #ccc; background-color: #f9f9f9; border-radius: 4px; margin-bottom: 15px;">
+        <h5 style="margin-top: 0; margin-bottom: 10px; font-weight: bold; color: #444;">Select Enabled Categories:</h5>
+        
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+            <label style="display: inline-flex; align-items: center; font-weight: normal; margin: 0; cursor: pointer;">
+                <input type="checkbox" id="node-input-catBattery" style="margin: 0 8px 0 0; width: auto; height: auto;">
+                <i class="fa fa-battery-three-quarters" style="width: 18px; color: #2ca02c;"></i> Battery SoC, Health & ESS Controls
+            </label>
+            
+            <label style="display: inline-flex; align-items: center; font-weight: normal; margin: 0; cursor: pointer;">
+                <input type="checkbox" id="node-input-catSolar" style="margin: 0 8px 0 0; width: auto; height: auto;">
+                <i class="fa fa-sun-o" style="width: 18px; color: #ff7f0e;"></i> Solar PV Production & MPPT
+            </label>
+            
+            <label style="display: inline-flex; align-items: center; font-weight: normal; margin: 0; cursor: pointer;">
+                <input type="checkbox" id="node-input-catGrid" style="margin: 0 8px 0 0; width: auto; height: auto;">
+                <i class="fa fa-plug" style="width: 18px; color: #1f77b4;"></i> Grid Power & Smart Metering
+            </label>
+            
+            <label style="display: inline-flex; align-items: center; font-weight: normal; margin: 0; cursor: pointer;">
+                <input type="checkbox" id="node-input-catEV" style="margin: 0 8px 0 0; width: auto; height: auto;">
+                <i class="fa fa-car" style="width: 18px; color: #9467bd;"></i> EV Charger Status
+            </label>
+            
+            <label style="display: inline-flex; align-items: center; font-weight: normal; margin: 0; cursor: pointer;">
+                <input type="checkbox" id="node-input-catOther" style="margin: 0 8px 0 0; width: auto; height: auto;">
+                <i class="fa fa-dashboard" style="width: 18px; color: #7f7f7f;"></i> Other Sensors (Loads, Temperatures, Status)
+            </label>
+        </div>
+    </div>
+</script>
+
+<script type="text/html" data-help-name="sigenergy-in">
+    <p>Listens for status and sensor updates from a Sigenergy inverter published via the <code>sigenergy2mqtt</code> service.</p>
+    
+    <h3>Inputs</h3>
+    <p>None. This is an input node that generates output based on MQTT events.</p>
+
+    <h3>Outputs</h3>
+    <dl class="message-properties">
+        <dt>payload <span class="property-type">number | boolean | string | object</span></dt>
+        <dd>The state value of the sensor (in Split mode) or an aggregated key-value object of all inverter sensors (in Grouped mode).</dd>
+        
+        <dt>sensor <span class="property-type">string</span></dt>
+        <dd>The name of the sensor (e.g., <code>battery_soc</code>). Only present in Split mode.</dd>
+        
+        <dt>inverterId <span class="property-type">string</span></dt>
+        <dd>The ID of the inverter that sent the update (e.g., <code>sigen_0_inverter_1</code>).</dd>
+
+        <dt>category <span class="property-type">string</span></dt>
+        <dd>The capability category of the sensor (e.g., <code>battery</code>, <code>solar</code>, <code>grid</code>, <code>ev</code>, <code>other</code>). Only present in Split mode.</dd>
+    </dl>
+
+    <h3>Details</h3>
+    <p><b>Auto-Discovery:</b> Click the <b>Discover</b> button next to the Inverter ID field to scan the connected MQTT broker for active Sigenergy inverter prefixes. The MQTT Broker must be deployed first.</p>
+    <p><b>Output Modes:</b></p>
+    <ul>
+        <li><b>Split:</b> Triggers a Node-RED message instantly on every single topic update. Useful for simple rules or database logging.</li>
+        <li><b>Grouped:</b> Aggregates topic updates and outputs a single combined state JSON object representing the entire inverter status. Uses a 250ms debouncer window to combine updates that arrive in rapid succession.</li>
+    </ul>
+</script>
+
+<script type="text/javascript">
+    RED.nodes.registerType('sigenergy-in', {
+        category: 'network',
+        color: '#E6E0F8', // Violet/Lavender background
+        defaults: {
+            name: { value: "" },
+            broker: { type: "mqtt-broker", required: true },
+            baseTopic: { value: "sigenergy2mqtt", required: true },
+            inverterId: { value: "all", required: true },
+            outputMode: { value: "split" },
+            filterSensors: { value: false },
+            catBattery: { value: true },
+            catSolar: { value: true },
+            catGrid: { value: true },
+            catEV: { value: true },
+            catOther: { value: true }
+        },
+        inputs: 0,
+        outputs: 1,
+        icon: "arrow-in.svg",
+        label: function() {
+            return this.name || (this.inverterId === 'all' ? "Sigenergy In (All)" : "Sigenergy In (" + this.inverterId + ")");
+        },
+        oneditprepare: function() {
+            // Category checkboxes toggle animation
+            $("#node-input-filterSensors").on("change", function() {
+                if ($(this).is(":checked")) {
+                    $("#row-sensor-categories").slideDown(250);
+                } else {
+                    $("#row-sensor-categories").slideUp(250);
+                }
+            });
+            
+            // Wire up discover button
+            $("#btn-discover-inverters").on("click", function() {
+                var brokerId = $("#node-input-broker").val();
+                var baseTopic = $("#node-input-baseTopic").val() || "sigenergy2mqtt";
+                
+                if (!brokerId || brokerId === "_ADD_") {
+                    RED.notify("Please select and deploy an MQTT Broker configuration first.", "warning");
+                    return;
+                }
+                
+                $("#row-discover-status").show();
+                $("#btn-discover-inverters").prop("disabled", true);
+                
+                $.getJSON("sigenergy/discover/" + brokerId, { baseTopic: baseTopic })
+                    .done(function(data) {
+                        $("#row-discover-status").hide();
+                        $("#btn-discover-inverters").prop("disabled", false);
+                        
+                        if (data.error) {
+                            RED.notify(data.error, "error");
+                            return;
+                        }
+                        
+                        if (data.inverters && data.inverters.length > 0) {
+                            var list = data.inverters;
+                            if (list.length === 1) {
+                                $("#node-input-inverterId").val(list[0]);
+                                RED.notify("Discovered and selected inverter: " + list[0], "success");
+                            } else {
+                                // Create select menu popup
+                                var selectHtml = "<div style='margin-bottom: 15px;'>Multiple inverters found. Select one to use:</div>";
+                                selectHtml += "<select id='temp-inverter-select' style='width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #ccc;'>";
+                                selectHtml += "<option value='all'>all (Listen to all)</option>";
+                                list.forEach(function(inv) {
+                                    selectHtml += "<option value='" + inv + "'>" + inv + "</option>";
+                                });
+                                selectHtml += "</select>";
+                                
+                                var container = $("<div style='padding: 10px;'>" + selectHtml + "</div>");
+                                
+                                // Overlay modal select
+                                container.dialog({
+                                    title: "Select Discovered Inverter",
+                                    modal: true,
+                                    width: 350,
+                                    buttons: [
+                                        {
+                                            text: "Select",
+                                            class: "primary",
+                                            click: function() {
+                                                var val = $("#temp-inverter-select").val();
+                                                $("#node-input-inverterId").val(val);
+                                                $(this).dialog("close");
+                                                container.remove();
+                                            }
+                                        },
+                                        {
+                                            text: "Cancel",
+                                            click: function() {
+                                                $(this).dialog("close");
+                                                container.remove();
+                                            }
+                                        }
+                                    ]
+                                });
+                            }
+                        } else {
+                            RED.notify("No active Sigenergy inverters found. Ensure your sigenergy2mqtt service is running.", "warning");
+                        }
+                    })
+                    .fail(function() {
+                        $("#row-discover-status").hide();
+                        $("#btn-discover-inverters").prop("disabled", false);
+                        RED.notify("Failed to query discovery endpoint. Please deploy your MQTT broker settings first.", "error");
+                    });
+            });
+        }
+    });
+</script>
